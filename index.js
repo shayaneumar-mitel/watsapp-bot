@@ -10,21 +10,39 @@ app.use(urlencoded({ extended: false }));
 
 app.post('/sms', async (req, res) => {
     const names = {
-        '+919999749496': { name: 'Shayane Umar' },
-        '+919945686171': { name: 'Rakesh Anchan' }
+        '+919999749496': {
+            userId: 'b2f4e5e0-b6ee-4b36-8782-d67888a341dc',
+            name: 'Shayane Umar'
+        },
+        '+919945686171': {
+            userId: '2111a28f-1e2e-4cf3-a54b-234675e78a0a',
+            name: 'Rakesh Anchan'
+        }
     };
     const twiml = new MessagingResponse();
 
     // Access the message body and the number it was sent from.
     console.log(`Incoming message from ${req.body.From}: ${req.body.Body}`);
     console.log(req.body.Body);
-    const payload = req.body.Body.split("-");
-    const accessCode = payload[0];
-    const message = payload[1];
     const phoneNumber = req.body.From.split(':')[1];
 
-    await postMessage(accessCode, names[phoneNumber].name + ": " + message);
-    twiml.message('Your message has been posted to the meeting.');
+    let watsappMessage = '';
+    if (req.body.Body === 'meetings') {
+        watsappMessage = await postMessage(names[phoneNumber].userId, '', '', 'meetings');
+    } else {
+        const payload = req.body.Body.split("-");
+        const accessCode = payload[0];
+        const message = payload[1];
+
+
+        await postMessage(names[phoneNumber].userId, accessCode, names[phoneNumber].name + ": " + message, '');
+        watsappMessage = 'Your message has been posted to the meeting.';
+    }
+
+
+    console.log('Watsapp message');
+    console.log(watsappMessage);
+    twiml.message(watsappMessage);
 
     res.writeHead(200, { 'Content-Type': 'text/xml' });
     res.end(twiml.toString());
@@ -34,7 +52,7 @@ http.createServer(app).listen(3000, () => {
     console.log('Express server listening on port 3000');
 });
 
-async function postMessage(accessCode, message) {
+async function postMessage(userId, accessCode, message, command) {
     async function getData(url, authToken) {
         const response = await fetch(url, {
             method: 'GET', // *GET, POST, PUT, DELETE, etc.
@@ -88,22 +106,35 @@ async function postMessage(accessCode, message) {
     let response = await postData('https://authentication.api.mitel.io/2017-09-01/token', body, '');
     let accessToken = response.access_token;
 
-    console.log('Access token: ' + response.access_token);
-    response = await getData(`https://media.api.mitel.io/2017-09-01/conferences?$filter=accessCode%20eq%20%27${accessCode}%27&$expand=tags`,
-        accessToken);
+    // console.log('Access token: ' + response.access_token);
 
-    let meeting = JSON.parse(response._embedded.items[0]._embedded.conferenceTags._embedded.items[0].value).meeting;
-    console.log('Conversation ID: ' + meeting.conversationId);
+    if (command === 'meetings') {
+        response = await getData(`https://media.us-west-2.us.api.mitel.io/2017-09-01/users/${userId}/conferences?$skip=0&$top=5&$expand=tags`,
+            accessToken);
 
-    body = {
-        "body": message,
-        "contentType": "text/plain",
-        "tag": "{\"sendId\":\"6e5b8391-fbf2-4806-b1dd-4a389d634562\"}"
-    };
+        message = response._embedded.items.map(c => c.accessCode + " " + c.name).join('\r\n');
+
+    } else {
+        response = await getData(`https://media.api.mitel.io/2017-09-01/conferences?$filter=accessCode%20eq%20%27${accessCode}%27&$expand=tags`,
+            accessToken);
+
+        let meeting = JSON.parse(response._embedded.items[0]._embedded.conferenceTags._embedded.items[0].value).meeting;
+        console.log('Conversation ID: ' + meeting.conversationId);
+
+        body = {
+            "body": message,
+            "contentType": "text/plain",
+            "tag": "{\"sendId\":\"6e5b8391-fbf2-4806-b1dd-4a389d634562\"}"
+        };
 
 
-    response = await postData(`https://chat.us.api.mitel.io/2017-09-01/conversations/${meeting.conversationId}/messages`,
-        body, accessToken);
+        response = await postData(`https://chat.us.api.mitel.io/2017-09-01/conversations/${meeting.conversationId}/messages`,
+            body, accessToken);
+    }
+
+    console.log(message);
+    return message;
 }
 
-// postMessage();
+// postMessage('', '', 'meetings');
+// postMessage('581932797', 'Awesome message', '');
