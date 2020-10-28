@@ -9,6 +9,10 @@ const app = express();
 app.use(urlencoded({ extended: false }));
 
 app.post('/sms', async (req, res) => {
+    const names = {
+        '+919999749496': { name: 'Shayane Umar' },
+        '+919945686171': { name: 'Rakesh Anchan' }
+    };
     const twiml = new MessagingResponse();
 
     // Access the message body and the number it was sent from.
@@ -17,8 +21,9 @@ app.post('/sms', async (req, res) => {
     const payload = req.body.Body.split("-");
     const accessCode = payload[0];
     const message = payload[1];
+    const phoneNumber = req.body.From.split(':')[1];
 
-    await postMessage(accessCode, message);
+    await postMessage(accessCode, names[phoneNumber].name + ": " + message);
     twiml.message('Your message has been posted to the meeting.');
 
     res.writeHead(200, { 'Content-Type': 'text/xml' });
